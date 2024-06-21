@@ -46,8 +46,8 @@ def search_nyaa(query, min_size=0, max_size=float('inf')):
         torrents = []
         rows = soup.find_all("tr", class_="default")
         for row in rows:
-            title_tag = row.find("a", class_="title")
-            title = title_tag.text if title_tag else "N/A"
+            title_tag = row.find("a", title=True)
+            title = title_tag["title"] if title_tag else "N/A"
             magnet_tag = row.find("a", title="Magnet Link")
             magnet = magnet_tag["href"] if magnet_tag else "N/A"
             size_tag = row.find_all("td", class_="text-center")[1]
@@ -103,11 +103,14 @@ class TorrentMenu(menus.Menu):
     @menus.button("\U0001F4E5")  # 📥
     async def on_add_torrent(self, payload):
         title, magnet, size = self.data[self.current_page]
-        response = add_torrent(magnet)
-        if response.status_code == 200:
-            await self.ctx.send(f"Torrent '{title}' added successfully.")
+        if login_to_qbittorrent():
+            response = add_torrent(magnet)
+            if response.status_code == 200:
+                await self.ctx.send(f"Torrent '{title}' added successfully.")
+            else:
+                await self.ctx.send(f"Failed to add torrent '{title}'. Status code: {response.status_code}")
         else:
-            await self.ctx.send(f"Failed to add torrent '{title}'. Status code: {response.status_code}")
+            await self.ctx.send("Failed to log in to qBittorrent WebUI.")
 
 def add_torrent(magnet):
     base_url = os.getenv("QBITTORRENT_BASE_URL")
@@ -135,11 +138,14 @@ async def search(ctx, *, query: str):
 @bot.command()
 @commands.cooldown(1, 10, commands.BucketType.user)
 async def add(ctx, *, magnet: str):
-    response = add_torrent(magnet)
-    if response.status_code == 200:
-        await ctx.send("Torrent added successfully.")
+    if login_to_qbittorrent():
+        response = add_torrent(magnet)
+        if response.status_code == 200:
+            await ctx.send("Torrent added successfully.")
+        else:
+            await ctx.send(f"Failed to add torrent. Status code: {response.status_code}")
     else:
-        await ctx.send(f"Failed to add torrent. Status code: {response.status_code}")
+        await ctx.send("Failed to log in to qBittorrent WebUI.")
 
 @bot.command()
 async def recent_searches(ctx):
