@@ -69,8 +69,17 @@ def search_nyaa(query, min_size=0, max_size=float('inf')):
             size_tag = row.find_all("td", class_="text-center")[1]
             size = size_tag.text if size_tag else "N/A"
             size_value = parse_size(size)
+
+            # Extract seeders, leechers, and downloads
+            seeders_tag = row.find_all("td", class_="text-center")[3]
+            seeders = seeders_tag.text if seeders_tag else "N/A"
+            leechers_tag = row.find_all("td", class_="text-center")[4]
+            leechers = leechers_tag.text if leechers_tag else "N/A"
+            downloads_tag = row.find_all("td", class_="text-center")[5]
+            downloads = downloads_tag.text if downloads_tag else "N/A"
+
             if min_size <= size_value <= max_size:
-                torrents.append((title, magnet, size))
+                torrents.append((title, magnet, size, seeders, leechers, downloads))
             if len(torrents) == 5:
                 break
 
@@ -98,10 +107,12 @@ class TorrentMenu(menus.Menu):
 
     def create_embed(self):
         embed = discord.Embed(title=f"Result {self.current_page + 1}/{len(self.data)}")
-        title, magnet, size = self.data[self.current_page]
+        title, magnet, size, seeders, leechers, downloads = self.data[self.current_page]
         embed.add_field(name="Title", value=title, inline=False)
         embed.add_field(name="Size", value=size, inline=True)
-        embed.add_field(name="Magnet", value=magnet, inline=False)
+        embed.add_field(name="Seeders", value=seeders, inline=True)
+        embed.add_field(name="Leechers", value=leechers, inline=True)
+        embed.add_field(name="Downloads", value=downloads, inline=True)
         return embed
 
     @menus.button("\U000025C0")  # ⬅️
@@ -118,7 +129,7 @@ class TorrentMenu(menus.Menu):
 
     @menus.button("\U0001F4E5")  # 📥
     async def on_add_torrent(self, payload):
-        title, magnet, size = self.data[self.current_page]
+        title, magnet, size, seeders, leechers, downloads = self.data[self.current_page]
         if login_to_qbittorrent():
             response = add_torrent(magnet)
             if response.status_code == 200:
