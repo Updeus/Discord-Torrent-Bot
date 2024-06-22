@@ -46,10 +46,26 @@ def search_nyaa(query, min_size=0, max_size=float('inf')):
         torrents = []
         rows = soup.find_all("tr", class_="default")
         for row in rows:
-            title_tag = row.find("a", title=True)
-            title = title_tag["title"] if title_tag else "N/A"
-            magnet_tag = row.find("a", title="Magnet Link")
-            magnet = magnet_tag["href"] if magnet_tag else "N/A"
+            # Extract title
+            title_tag = row.find("a", class_="comments")
+            if title_tag:
+                title = title_tag.find_next_sibling("a")["title"]
+            else:
+                title_tag = row.find_all("a", href=True)
+                if len(title_tag) > 1:
+                    title = title_tag[1].get("title", "N/A")
+                else:
+                    title = "N/A"
+
+            # Extract magnet link
+            magnet_icon_tag = row.find("i", class_="fa-magnet")
+            if magnet_icon_tag:
+                magnet_tag = magnet_icon_tag.parent
+                magnet = magnet_tag["href"] if magnet_tag and "magnet:" in magnet_tag["href"] else "N/A"
+            else:
+                magnet = "N/A"
+
+            # Extract size
             size_tag = row.find_all("td", class_="text-center")[1]
             size = size_tag.text if size_tag else "N/A"
             size_value = parse_size(size)
