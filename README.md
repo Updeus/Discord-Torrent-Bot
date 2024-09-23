@@ -1,6 +1,7 @@
 # Discord Torrent Bot
 
-This is a Discord bot that allows users to search for torrents on Nyaa.si and add them to qBittorrent. The bot supports various commands for searching, adding torrents, viewing recent searches and additions, setting filters, scheduling downloads, and more.
+This is a Discord bot that allows users to search for torrents on Nyaa.si and add them to qBittorrent. This bot can also download torrents from any magnet link that you provide.
+The bot supports various commands for searching, adding torrents, viewing recent searches and additions, setting filters, scheduling downloads, and more.
 ![image](https://github.com/Updeus/Discord-Torrent-Bot/assets/73512650/d1840f30-d29b-4161-be71-5cf00725728b)
 
 ## Prerequisites
