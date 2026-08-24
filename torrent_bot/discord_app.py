@@ -156,20 +156,30 @@ class SearchView(discord.ui.View):
         await self._add(interaction, Route.ANIME)
 
 
-class DeleteModal(discord.ui.Modal, title="Confirm permanent deletion"):
-    confirmation = discord.ui.TextInput(
-        label="Type DELETE to remove the downloaded files",
-        placeholder="DELETE",
-        max_length=10,
-    )
-
-    def __init__(self, service: MediaService, request_id: int):
-        super().__init__()
+class DeleteModal(discord.ui.Modal):
+    def __init__(self, service: MediaService, request_id: int, request_title: str):
+        super().__init__(title="Confirm permanent deletion")
         self.service = service
         self.request_id = request_id
+        self.request_title = request_title
+        self.media_title = discord.ui.TextInput(
+            label="Media title (leave unchanged)",
+            default=request_title[:4000],
+            max_length=4000,
+        )
+        self.confirmation = discord.ui.TextInput(
+            label="Type DELETE to remove downloaded files",
+            placeholder="DELETE",
+            max_length=10,
+        )
+        self.add_item(self.media_title)
+        self.add_item(self.confirmation)
 
     async def on_submit(self, interaction: discord.Interaction) -> None:
-        if str(self.confirmation).strip() != "DELETE":
+        if (
+            str(self.media_title) != self.request_title[:4000]
+            or str(self.confirmation).strip() != "DELETE"
+        ):
             await interaction.response.send_message(
                 "Deletion cancelled: confirmation did not match.", ephemeral=True
             )
@@ -183,10 +193,11 @@ class DeleteModal(discord.ui.Modal, title="Confirm permanent deletion"):
 
 
 class RemoveView(discord.ui.View):
-    def __init__(self, service: MediaService, request_id: int):
+    def __init__(self, service: MediaService, request_id: int, request_title: str):
         super().__init__(timeout=120)
         self.service = service
         self.request_id = request_id
+        self.request_title = request_title
 
     @discord.ui.button(label="Remove torrent only", style=discord.ButtonStyle.secondary)
     async def keep_files(self, interaction: discord.Interaction, _: discord.ui.Button) -> None:
@@ -200,7 +211,9 @@ class RemoveView(discord.ui.View):
 
     @discord.ui.button(label="Delete torrent and files", style=discord.ButtonStyle.danger)
     async def delete_files(self, interaction: discord.Interaction, _: discord.ui.Button) -> None:
-        await interaction.response.send_modal(DeleteModal(self.service, self.request_id))
+        await interaction.response.send_modal(
+            DeleteModal(self.service, self.request_id, self.request_title)
+        )
 
     @discord.ui.button(label="Cancel", style=discord.ButtonStyle.secondary)
     async def cancel(self, interaction: discord.Interaction, _: discord.ui.Button) -> None:
@@ -328,7 +341,7 @@ class MediaCommands(commands.Cog):
         request = await self.service.database.get_request(request_id)
         await ctx.send(
             f"Remove request #{request.id}: **{request.title}**? Choose carefully.",
-            view=RemoveView(self.service, request.id),
+            view=RemoveView(self.service, request.id, request.title),
         )
 
     @commands.hybrid_command(name="schedule", description="Schedule a magnet addition")
