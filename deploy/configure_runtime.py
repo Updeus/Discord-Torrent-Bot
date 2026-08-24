@@ -193,7 +193,7 @@ def configure_discord(env: dict[str, str], updates: dict[str, str]) -> None:
     if current and current != "0":
         print("Discord: retained configured server ID")
         return
-    token = env.get("DISCORD_TOKEN") or env.get("TOKEN")
+    token = env.get("DISCORD_TOKEN") or env.get("DISCORD_BOT_TOKEN") or env.get("TOKEN")
     if not token:
         raise RuntimeError("DISCORD_TOKEN is missing from the environment file")
     guilds = api_request(
@@ -204,6 +204,7 @@ def configure_discord(env: dict[str, str], updates: dict[str, str]) -> None:
         visible = ", ".join(f"{guild['name']} ({guild['id']})" for guild in guilds)
         raise RuntimeError(f"Expected one Discord server; found: {visible or 'none'}")
     updates["DISCORD_GUILD_ID"] = str(guilds[0]["id"])
+    updates["DISCORD_TOKEN"] = token
     print(f"Discord: selected {guilds[0]['name']}")
 
 
