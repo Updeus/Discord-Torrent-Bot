@@ -1,0 +1,21 @@
+[Unit]
+Description=Discord-to-Jellyfin media automation bot
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=jarod
+WorkingDirectory=/home/jarod/Discord-Torrent-Bot
+EnvironmentFile=/home/jarod/Discord-Torrent-Bot/.env
+ExecStart=/home/jarod/Discord-Torrent-Bot/botenv/bin/python /home/jarod/Discord-Torrent-Bot/bot.py
+Restart=on-failure
+RestartSec=10
+TimeoutStopSec=30
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ReadWritePaths=/home/jarod/Discord-Torrent-Bot/data /mnt/AWA/Collection
+
+[Install]
+WantedBy=multi-user.target

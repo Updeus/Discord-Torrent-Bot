@@ -1,89 +1,210 @@
-# Discord Torrent Bot
+# Reliable Discord-to-Jellyfin Media Bot
 
-This is a Discord bot that allows users to search for torrents on Nyaa.si and add them to qBittorrent. This bot can also download torrents from any magnet link that you provide.
-The bot supports various commands for searching, adding torrents, viewing recent searches and additions, setting filters, scheduling downloads, and more.
-![image](https://github.com/Updeus/Discord-Torrent-Bot/assets/73512650/d1840f30-d29b-4161-be71-5cf00725728b)
+A persistent, asynchronous media automation service connecting:
 
-## Prerequisites
+```text
+Discord → Prowlarr → qBittorrent → hard-link organizer → Jellyfin
+```
 
-- Python 3.8 or higher
-- `discord.py` library
-- `requests` library
-- `beautifulsoup4` library
-- `apscheduler` library
-- A qBittorrent Web UI instance running
+The original `!add <magnet>` command remains available. The bot adds persistent
+request tracking, interactive searches, routing controls, editable status
+cards, scheduled additions, safe organization, and Jellyfin readiness checks.
 
-## Installation
+## Highlights
 
-1. Clone this repository:
-    ```bash
-    git clone https://github.com/Updeus/Discord-Torrent-Bot.git
-    cd discord-torrent-bot
-    ```
+- Asynchronous clients built with `aiohttp`, including timeouts, retry handling,
+  authentication recovery, and graceful shutdown.
+- SQLite persistence for requests, schedules, preferences, Discord message IDs,
+  state transitions, searches, routing changes, and audit events.
+- Duplicate detection for BitTorrent v1 and v2 info hashes before submission.
+- Prowlarr-backed search with a Nyaa-only fallback during Prowlarr outages.
+- qBittorrent sync monitoring and dedicated routing categories.
+- Hard-link organization that leaves the original seeding files unchanged.
+- Separate Jellyfin Movies and Shows views, library scans, and readiness checks.
+- Native `discord.ui` buttons, pagination, status embeds, and deletion modals.
+- systemd service, path watcher, 15-minute fallback timer, and journald logging.
+- Secret redaction and a mode-`0600` environment file.
 
-2. Install the required Python packages:
-    ```bash
-    pip install discord.py requests beautifulsoup4 apscheduler
-    ```
+## Media lifecycle
 
-3. Create a `.env` file in the root directory and add your environment variables:
-    ```env
-    QBITTORRENT_USERNAME=your_qbittorrent_username
-    QBITTORRENT_PASSWORD=your_qbittorrent_password
-    QBITTORRENT_BASE_URL=http://your_qbittorrent_ip:port
-    DISCORD_BOT_TOKEN=your_discord_bot_token
-    ```
+Each request follows a recoverable state machine:
 
-4. Create a `start.bat` file in the root directory to run your bot easily:
-    ```batch
-    @echo off
-    set "QBITTORRENT_USERNAME=your_qbittorrent_username"
-    set "QBITTORRENT_PASSWORD=your_qbittorrent_password"
-    set "QBITTORRENT_BASE_URL=http://your_qbittorrent_ip:port"
-    set "DISCORD_BOT_TOKEN=your_discord_bot_token"
-    python bot.py
-    pause
-    ```
+```text
+queued → downloading → organizing → scanning → ready
+                         ├→ needs_attention
+                         └→ error
+```
 
-Replace the placeholders with your actual qBittorrent credentials, base URL, and Discord bot token.
+Requests can also be paused, resumed, rerouted, or retried. State and the
+original Discord status message survive service restarts.
 
-## Running the Bot
+## Organization and routing
 
-1. Make sure your qBittorrent Web UI is running and accessible.
-2. Double-click the `start.bat` file to run the bot.
+All qBittorrent categories retain the same source download directory:
 
-## Commands
+| Category | Purpose |
+| --- | --- |
+| `discord-auto` | Classify from the release name and files |
+| `discord-movie` | Force movie routing |
+| `discord-show` | Force TV-show routing |
+| `discord-anime` | Force anime/show routing |
 
-- `!search <query>` - Search for torrents on Nyaa.si.
-- `!add <magnet>` - Add a torrent to qBittorrent by magnet link.
-- `!recent_searches` - Show recent searches.
-- `!recent_additions` - Show recent added torrents.
-- `!setprefix <prefix>` - Set a custom command prefix.
-- `!setfilter <min_size> <max_size>` - Set file size filter in MB.
-- `!schedule <magnet> <time>` - Schedule a torrent download (format: YYYY-MM-DD HH:MM:SS).
-- `!stats` - Show bot statistics.
-- `!help_command` - Show this help message.
-- `!test_qbittorrent` - Test connection to qBittorrent Web UI.
+Explicit categories take precedence over filename classification. Completed,
+stable media is hard-linked into:
 
-## Code Explanation
+```text
+JellyfinView2/
+├── Movies/
+└── Shows/
+    └── Show Name/
+        └── Season 02/
+```
 
-### Main Script
+Single episodes such as `Show.Name.S02E04.mkv` or `Show.Name.2x04.mkv` are
+retained and placed in the inferred show and season. Subtitles and extras are
+preserved. Samples, incomplete files, non-media downloads, and genuinely
+ambiguous folders remain untouched and are reported for attention.
 
-The main script initializes the bot, sets up the necessary intents, defines various commands, and handles interactions with Nyaa.si and qBittorrent.
+The organizer never renames, moves, or modifies qBittorrent's source files.
+Stale managed view links are pruned without deleting the source content.
 
-### Functions
+## Discord commands
 
-- `login_to_qbittorrent()`: Logs in to qBittorrent Web UI using the credentials provided in the environment variables.
-- `search_nyaa(query, min_size=0, max_size=float('inf'))`: Searches for torrents on Nyaa.si based on the query and size filters, and parses the results.
-- `parse_size(size_str)`: Parses the size string and converts it to bytes.
-- `add_torrent(magnet)`: Adds a torrent to qBittorrent using the magnet link.
+Legacy prefix commands and slash-command equivalents are available.
 
-### TorrentMenu Class
+### Add and search
 
-The `TorrentMenu` class handles the interactive menu in Discord for browsing search results. It uses buttons for navigation and adding torrents.
+| Command | Description |
+| --- | --- |
+| `!add <magnet>` / `/add` | Add a magnet with auto, movie, show, or anime routing |
+| `!addmovie <magnet>` | Add with movie routing |
+| `!addshow <magnet>` | Add with show routing |
+| `!addanime <magnet>` | Add with anime routing |
+| `!search <query>` / `/search` | Search Prowlarr with paginated add buttons |
+| `!schedule` / `/schedule` | Schedule a persistent future addition |
 
-### Commands
+### Operations
 
-Various commands are defined using the `@bot.command()` decorator. These commands allow users to interact with the bot to search for torrents, add them to qBittorrent, view recent searches and additions, set filters, and schedule downloads.
+| Command | Description |
+| --- | --- |
+| `!downloads` / `/downloads` | List active and attention-needed requests |
+| `!status <id>` / `/status` | Show the current request status |
+| `!pause`, `!resume`, `!retry` | Control a request |
+| `!route <id> <route>` | Change its routing override |
+| `!remove <id>` / `/remove` | Remove a torrent or request confirmed file deletion |
 
----
+File deletion displays the media title and requires typing `DELETE`. The actor,
+timestamp, target, action, and outcome are written to the audit log.
+
+### Preferences and diagnostics
+
+- `!recent_searches` and `!recent_additions`
+- `!setprefix`
+- `!setfilter <minimum_mb> <maximum_mb>`
+- `!stats`
+- `!test_qbittorrent`
+- `!help_command`
+
+## Configuration
+
+Copy `.env.example` to `.env` and supply local credentials:
+
+```bash
+cp .env.example .env
+chmod 600 .env
+```
+
+Important variables:
+
+| Variable | Description |
+| --- | --- |
+| `DISCORD_BOT_TOKEN` | Discord application bot token |
+| `DISCORD_GUILD_ID` | Optional server restriction; `0` allows every joined server |
+| `QBITTORRENT_BASE_URL` | qBittorrent Web UI/API address |
+| `QBITTORRENT_USERNAME` / `QBITTORRENT_PASSWORD` | qBittorrent credentials |
+| `PROWLARR_BASE_URL` / `PROWLARR_API_KEY` | Prowlarr API configuration |
+| `JELLYFIN_BASE_URL` / `JELLYFIN_API_KEY` | Jellyfin API configuration |
+| `JELLYFIN_MOVIES_LIBRARY_ID` | Jellyfin Movies library ID |
+| `JELLYFIN_SHOWS_LIBRARY_ID` | Jellyfin Shows library ID |
+| `COLLECTION_SOURCE` | qBittorrent source directory |
+| `COLLECTION_VIEW` | Hard-link view root consumed by Jellyfin |
+| `DATABASE_PATH` | Persistent SQLite database path |
+| `TZ` | Timezone used for legacy schedules |
+
+Do not commit `.env`. Magnet links and API credentials are never included in
+Discord messages or normal application logs.
+
+## Local development
+
+Python 3.11 or newer is recommended.
+
+```bash
+python -m venv .venv
+```
+
+Windows PowerShell:
+
+```powershell
+.\.venv\Scripts\python -m pip install -r requirements-dev.txt
+.\.venv\Scripts\python -m pytest -q
+.\.venv\Scripts\python -m ruff check .
+.\.venv\Scripts\python bot.py
+```
+
+Linux/macOS:
+
+```bash
+.venv/bin/python -m pip install -r requirements-dev.txt
+.venv/bin/python -m pytest -q
+.venv/bin/python -m ruff check .
+.venv/bin/python bot.py
+```
+
+The database and schema are initialized automatically at startup.
+
+## Deployment
+
+Deployment templates are under [`deploy/`](deploy/):
+
+- `compose.prowlarr.yml` runs a digest-pinned LinuxServer Prowlarr image and
+  binds its interface to `127.0.0.1:9696` only.
+- `discord-bot.service` runs the persistent Discord service.
+- `jellyfin-collection-organizer.path` watches for top-level source changes.
+- `jellyfin-collection-organizer.timer` runs the 15-minute fallback scan.
+- `configure_runtime.py` configures local integrations without displaying keys.
+
+Review and replace the example user names, paths, UID/GID, timezone, and ports
+before installing the templates on another server.
+
+Run an organizer dry-run before enabling its service:
+
+```bash
+python -m torrent_bot.organizer \
+  /path/to/Collection \
+  /path/to/Collection/JellyfinView2 \
+  --min-age-seconds 120
+```
+
+Add `--apply` only after reviewing the classification counts. Applying creates
+and prunes hard links; it does not modify source downloads.
+
+## Tests
+
+The test suite covers:
+
+- magnet validation and v1/v2 info hashes;
+- duplicate detection, state transitions, and database recovery;
+- release-name cleanup, size parsing, routing precedence, and season inference;
+- isolated episodes, season packs, movies, extras, subtitles, and ambiguity;
+- hard-link creation, unchanged source files, and safe stale-link cleanup;
+- mocked qBittorrent, Prowlarr, Jellyfin, and Discord failure paths.
+
+```bash
+python -m pytest -q
+```
+
+## Responsible use
+
+Configure only indexers you are authorized to access and add only media you are
+legally permitted to download and share. Prowlarr should remain private and
+must not be exposed directly to the public internet.

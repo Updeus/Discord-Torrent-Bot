@@ -1,0 +1,9 @@
+[Unit]
+Description=Watch the Collection download folder for new media
+
+[Path]
+PathChanged=/mnt/AWA/Collection
+Unit=jellyfin-collection-organizer.service
+
+[Install]
+WantedBy=default.target
