@@ -172,7 +172,10 @@ class ProwlarrClient:
                 raise ServiceError(f"Prowlarr search failed ({response.status})")
             payload = await response.json()
         results: list[SearchResult] = []
-        for item in payload[:limit]:
+        # Prowlarr applies the requested limit per indexer, so truncating the
+        # combined response here would let the first indexer monopolize results.
+        # The service performs the final filtered and ranked 25-result cap.
+        for item in payload[:500]:
             title = str(item.get("title") or "Unknown")
             download_url = item.get("downloadUrl") or item.get("guid")
             magnet = item.get("magnetUrl")

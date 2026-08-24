@@ -148,7 +148,18 @@ class MediaService:
             for result in results
             if result.size >= min_size and (max_size is None or result.size <= max_size)
         ]
-        filtered.sort(key=lambda result: (result.seeders, result.size), reverse=True)
+        normalized_query = " ".join(query.casefold().split())
+
+        def search_rank(result: SearchResult) -> tuple[bool, bool, int, int]:
+            normalized_title = " ".join(result.title.casefold().split())
+            return (
+                normalized_title.startswith(normalized_query),
+                normalized_query in normalized_title,
+                result.seeders,
+                result.size,
+            )
+
+        filtered.sort(key=search_rank, reverse=True)
         filtered = filtered[:25]
         await self.database.save_search(user_id, query, filtered)
         return filtered
