@@ -83,37 +83,48 @@ def configure_prowlarr(base_url: str, config_path: Path, updates: dict[str, str]
     updates["PROWLARR_API_KEY"] = api_key
 
     configured = api_request(f"{base_url}/api/v1/indexer", headers=headers)
-    if any(indexer.get("name", "").casefold() == "nyaa" for indexer in configured):
-        print("Prowlarr: Nyaa already configured")
-        return
-
+    configured_names = {indexer.get("name", "").casefold() for indexer in configured}
     schemas = api_request(f"{base_url}/api/v1/indexer/schema", headers=headers)
-    schema = next(
-        (
-            item
-            for item in schemas
-            if item.get("definitionName", "").casefold() in {"nyaa", "nyaasi"}
-            or item.get("name", "").casefold() == "nyaa"
-        ),
-        None,
-    )
-    if schema is None:
-        raise RuntimeError("Prowlarr does not expose a Nyaa indexer schema")
     profiles = api_request(f"{base_url}/api/v1/appprofile", headers=headers)
     if not profiles:
         raise RuntimeError("Prowlarr does not expose an application profile")
-    schema.update(
-        {
-            "name": "Nyaa",
-            "enableRss": True,
-            "enableAutomaticSearch": True,
-            "enableInteractiveSearch": True,
-            "priority": 25,
-            "appProfileId": profiles[0]["id"],
-        }
+    desired_indexers = (
+        ("nyaa", "Nyaa", 25),
+        ("yts", "YTS", 20),
+        ("TorrentsCSV", "TorrentsCSV", 20),
+        ("torrentdownloads", "Torrent Downloads", 30),
+        ("thepiratebay", "The Pirate Bay", 30),
     )
-    api_request(f"{base_url}/api/v1/indexer", headers=headers, method="POST", payload=schema)
-    print("Prowlarr: configured Nyaa")
+    schemas_by_definition = {item.get("definitionName", "").casefold(): item for item in schemas}
+    for definition, name, priority in desired_indexers:
+        if name.casefold() in configured_names:
+            print(f"Prowlarr: {name} already configured")
+            continue
+        schema = schemas_by_definition.get(definition.casefold())
+        if schema is None:
+            print(f"Prowlarr: {name} schema is unavailable; skipped")
+            continue
+        schema.update(
+            {
+                "name": name,
+                "enableRss": True,
+                "enableAutomaticSearch": True,
+                "enableInteractiveSearch": True,
+                "priority": priority,
+                "appProfileId": profiles[0]["id"],
+            }
+        )
+        try:
+            api_request(
+                f"{base_url}/api/v1/indexer",
+                headers=headers,
+                method="POST",
+                payload=schema,
+            )
+        except urllib.error.HTTPError as error:
+            print(f"Prowlarr: {name} failed validation (HTTP {error.code}); skipped")
+            continue
+        print(f"Prowlarr: configured {name}")
 
 
 def jellyfin_token(db_path: Path, base_url: str) -> str:

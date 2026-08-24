@@ -7,7 +7,7 @@ import bencodepy
 import pytest
 
 from torrent_bot.database import Database
-from torrent_bot.models import RequestState, Route
+from torrent_bot.models import RequestState, Route, SearchResult
 from torrent_bot.service import MediaService, torrent_file_hash
 
 
@@ -20,6 +20,37 @@ class FakeQbit:
 
     async def ensure_categories(self, save_path: str) -> None:
         return None
+
+
+class FakeProwlarr:
+    async def search(self, query: str) -> list[SearchResult]:
+        return [
+            SearchResult(
+                result_id="incidental",
+                title="Stranger Things - E Pluribus Unum",
+                size=2_000,
+                seeders=500,
+                leechers=0,
+                indexer="General",
+                category="TV",
+                download_url="/incidental",
+            ),
+            SearchResult(
+                result_id="show",
+                title="Pluribus S01E01 1080p WEB-DL",
+                size=1_000,
+                seeders=20,
+                leechers=0,
+                indexer="TV",
+                category="TV",
+                download_url="/show",
+            ),
+        ]
+
+
+class RedirectingProwlarr:
+    async def download(self, result: SearchResult) -> str:
+        return "magnet:?xt=urn:btih:" + "ab" * 20
 
 
 @pytest.mark.asyncio
@@ -43,6 +74,59 @@ async def test_duplicate_add_is_idempotent(tmp_path: Path) -> None:
     assert first.id == second.id
     assert len(qbit.added) == 1
     assert first.state == RequestState.QUEUED
+    await database.close()
+
+
+@pytest.mark.asyncio
+async def test_search_ranks_title_matches_before_incidental_matches(tmp_path: Path) -> None:
+    database = Database(tmp_path / "bot.db")
+    await database.connect()
+    settings = SimpleNamespace(prowlarr_enabled=True)
+    service = MediaService(
+        settings,
+        database,
+        FakeQbit(),
+        FakeProwlarr(),  # type: ignore[arg-type]
+        None,
+        None,
+    )
+
+    results = await service.search("Pluribus", user_id=1)
+
+    assert [result.result_id for result in results] == ["show", "incidental"]
+    await database.close()
+
+
+@pytest.mark.asyncio
+async def test_search_result_magnet_redirect_is_added(tmp_path: Path) -> None:
+    database = Database(tmp_path / "bot.db")
+    await database.connect()
+    qbit = FakeQbit()
+    settings = SimpleNamespace(collection_source=tmp_path)
+    service = MediaService(
+        settings,
+        database,
+        qbit,
+        RedirectingProwlarr(),  # type: ignore[arg-type]
+        None,
+        None,
+    )
+    result = SearchResult(
+        result_id="redirect",
+        title="Example Show S01",
+        size=1000,
+        seeders=10,
+        leechers=0,
+        indexer="General",
+        category="TV",
+        download_url="/download",
+    )
+
+    request, created = await service.add_search_result(result, Route.SHOW, 1, 2, 3)
+
+    assert created is True
+    assert request.info_hash == "ab" * 20
+    assert qbit.added == [("magnet:?xt=urn:btih:" + "ab" * 20, Route.SHOW, str(tmp_path))]
     await database.close()
 
 

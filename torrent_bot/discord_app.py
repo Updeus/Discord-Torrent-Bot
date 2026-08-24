@@ -123,13 +123,29 @@ class SearchView(discord.ui.View):
 
     async def _add(self, interaction: discord.Interaction, route: Route) -> None:
         await interaction.response.defer(ephemeral=True, thinking=True)
-        request, created = await self.service.add_search_result(
-            self.results[self.page],
-            route,
-            interaction.user.id,
-            interaction.guild_id or self.guild_id,
-            interaction.channel_id or self.channel_id,
-        )
+        result = self.results[self.page]
+        try:
+            request, created = await self.service.add_search_result(
+                result,
+                route,
+                interaction.user.id,
+                interaction.guild_id or self.guild_id,
+                interaction.channel_id or self.channel_id,
+            )
+        except Exception as error:
+            # Some providers redirect download endpoints to magnet URIs or fail
+            # transiently. Always finish the interaction without logging URLs.
+            LOGGER.error(
+                "Search result add failed for %s from %s (%s)",
+                result.result_id,
+                result.indexer,
+                type(error).__name__,
+            )
+            await interaction.followup.send(
+                "I couldn't add that search result. Please try it again or choose another result.",
+                ephemeral=True,
+            )
+            return
         if created:
             message = await interaction.channel.send(embed=status_embed(request))
             request = await self.service.database.update_request(request.id, message_id=message.id)

@@ -148,7 +148,18 @@ class MediaService:
             for result in results
             if result.size >= min_size and (max_size is None or result.size <= max_size)
         ]
-        filtered.sort(key=lambda result: (result.seeders, result.size), reverse=True)
+        normalized_query = " ".join(query.casefold().split())
+
+        def search_rank(result: SearchResult) -> tuple[bool, bool, int, int]:
+            normalized_title = " ".join(result.title.casefold().split())
+            return (
+                normalized_title.startswith(normalized_query),
+                normalized_query in normalized_title,
+                result.seeders,
+                result.size,
+            )
+
+        filtered.sort(key=search_rank, reverse=True)
         filtered = filtered[:25]
         await self.database.save_search(user_id, query, filtered)
         return filtered
@@ -163,7 +174,10 @@ class MediaService:
     ) -> tuple[MediaRequest, bool]:
         if result.magnet:
             return await self.add_magnet(result.magnet, route, requester_id, guild_id, channel_id)
-        filename, payload = await self.prowlarr.download(result)
+        download = await self.prowlarr.download(result)
+        if isinstance(download, str):
+            return await self.add_magnet(download, route, requester_id, guild_id, channel_id)
+        filename, payload = download
         info_hash = torrent_file_hash(payload)
         existing = await self.database.get_by_hash(info_hash)
         if existing and existing.state != RequestState.REMOVED:
@@ -214,7 +228,7 @@ class MediaService:
 
     async def change_route(self, request_id: int, route: Route, actor_id: int) -> MediaRequest:
         request = await self.database.get_request(request_id)
-        await self.qbit.set_category(request.info_hash, route)
+        await self.qbit.set_route(request.info_hash, route)
         result = await self._update(request.id, route=route, error=None)
         await self.database.audit(actor_id, "route", request.id, route=route.value)
         return result
@@ -315,7 +329,7 @@ class MediaService:
         actual_route = request.route
         if request.route == Route.AUTO:
             actual_route = Route.SHOW if result.kind == "show" else Route.MOVIE
-            await self.qbit.set_category(request.info_hash, actual_route)
+            await self.qbit.set_route(request.info_hash, actual_route)
         request = await self._update(
             request.id,
             state=RequestState.SCANNING,
