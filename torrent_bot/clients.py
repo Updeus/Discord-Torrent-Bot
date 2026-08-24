@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 from typing import Any
 from urllib.parse import urlencode, urljoin, urlsplit
 
@@ -16,6 +17,28 @@ LOGGER = logging.getLogger(__name__)
 
 class ServiceError(RuntimeError):
     pass
+
+
+def normalize_result_links(*values: object) -> tuple[str | None, str | None]:
+    """Return (download URL, magnet), even when an indexer swaps its fields."""
+    download_url: str | None = None
+    magnet: str | None = None
+    for value in values:
+        if not isinstance(value, str) or not value:
+            continue
+        if value.lower().startswith("magnet:?"):
+            magnet = magnet or value
+        elif value.startswith("/") or urlsplit(value).scheme.lower() in {"http", "https"}:
+            download_url = download_url or value
+    return download_url, magnet
+
+
+def jellyfin_search_terms(title: str) -> list[str]:
+    terms = [title.strip()]
+    without_year = re.sub(r"\s*\((?:19|20)\d{2}\)\s*$", "", title).strip()
+    if without_year and without_year not in terms:
+        terms.append(without_year)
+    return terms
 
 
 class QBittorrentClient:
@@ -190,8 +213,9 @@ class ProwlarrClient:
         # The service performs the final filtered and ranked 25-result cap.
         for item in payload[:500]:
             title = str(item.get("title") or "Unknown")
-            download_url = item.get("downloadUrl") or item.get("guid")
-            magnet = item.get("magnetUrl")
+            download_url, magnet = normalize_result_links(
+                item.get("downloadUrl"), item.get("magnetUrl"), item.get("guid")
+            )
             indexer = str(item.get("indexer") or item.get("indexerId") or "Prowlarr")
             categories = item.get("categories") or []
             category = (
@@ -220,6 +244,8 @@ class ProwlarrClient:
         if not result.download_url:
             raise ServiceError("Search result has no downloadable torrent")
         url = result.download_url
+        if url.lower().startswith("magnet:?"):
+            return url
         if url.startswith("/"):
             url = f"{self.base_url}{url}"
         prowlarr_origin = urlsplit(self.base_url)[:2]
@@ -321,19 +347,22 @@ class JellyfinClient:
                 raise ServiceError(f"Jellyfin refresh failed ({response.status})")
 
     async def find_item(self, title: str, parent_id: str = "") -> dict[str, Any] | None:
-        params = {
-            "searchTerm": title,
-            "recursive": "true",
-            "limit": "10",
-            "fields": "Path",
-        }
-        if parent_id:
-            params["parentId"] = parent_id
-        async with self.session.get(
-            f"{self.base_url}/Items", headers=self.headers, params=params
-        ) as response:
-            if response.status != 200:
-                raise ServiceError(f"Jellyfin item lookup failed ({response.status})")
-            payload = await response.json()
-        items = payload.get("Items", [])
-        return items[0] if items else None
+        for search_term in jellyfin_search_terms(title):
+            params = {
+                "searchTerm": search_term,
+                "recursive": "true",
+                "limit": "10",
+                "fields": "Path",
+            }
+            if parent_id:
+                params["parentId"] = parent_id
+            async with self.session.get(
+                f"{self.base_url}/Items", headers=self.headers, params=params
+            ) as response:
+                if response.status != 200:
+                    raise ServiceError(f"Jellyfin item lookup failed ({response.status})")
+                payload = await response.json()
+            items = payload.get("Items", [])
+            if items:
+                return items[0]
+        return None

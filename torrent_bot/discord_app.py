@@ -151,6 +151,13 @@ class SearchView(discord.ui.View):
             request = await self.service.database.update_request(request.id, message_id=message.id)
             await interaction.followup.send(f"Added as request #{request.id}.", ephemeral=True)
         else:
+            if request.route != route:
+                request = await self.service.change_route(request.id, route, interaction.user.id)
+                await interaction.followup.send(
+                    f"Request #{request.id} already existed; its route is now {route.value.title()}.",
+                    ephemeral=True,
+                )
+                return
             await interaction.followup.send(
                 f"That torrent already exists as request #{request.id}.", ephemeral=True
             )

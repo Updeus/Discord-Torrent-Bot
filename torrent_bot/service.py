@@ -172,7 +172,7 @@ class MediaService:
         guild_id: int,
         channel_id: int,
     ) -> tuple[MediaRequest, bool]:
-        if result.magnet:
+        if result.magnet and result.magnet.lower().startswith("magnet:?"):
             return await self.add_magnet(result.magnet, route, requester_id, guild_id, channel_id)
         download = await self.prowlarr.download(result)
         if isinstance(download, str):
