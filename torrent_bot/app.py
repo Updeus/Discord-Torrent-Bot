@@ -39,6 +39,7 @@ class MediaBot(commands.Bot):
         self.http_session = aiohttp.ClientSession(
             timeout=timeout,
             headers={"User-Agent": "Discord-Torrent-Bot/2.0"},
+            cookie_jar=aiohttp.CookieJar(unsafe=True),
         )
         qbit = QBittorrentClient(
             self.http_session,
