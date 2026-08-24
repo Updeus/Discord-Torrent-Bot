@@ -97,6 +97,9 @@ def configure_prowlarr(base_url: str, config_path: Path, updates: dict[str, str]
     )
     if schema is None:
         raise RuntimeError("Prowlarr does not expose a Nyaa indexer schema")
+    profiles = api_request(f"{base_url}/api/v1/appprofile", headers=headers)
+    if not profiles:
+        raise RuntimeError("Prowlarr does not expose an application profile")
     schema.update(
         {
             "name": "Nyaa",
@@ -104,6 +107,7 @@ def configure_prowlarr(base_url: str, config_path: Path, updates: dict[str, str]
             "enableAutomaticSearch": True,
             "enableInteractiveSearch": True,
             "priority": 25,
+            "appProfileId": profiles[0]["id"],
         }
     )
     api_request(f"{base_url}/api/v1/indexer", headers=headers, method="POST", payload=schema)
