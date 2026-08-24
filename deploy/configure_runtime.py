@@ -196,15 +196,22 @@ def configure_discord(env: dict[str, str], updates: dict[str, str]) -> None:
     token = env.get("DISCORD_TOKEN") or env.get("DISCORD_BOT_TOKEN") or env.get("TOKEN")
     if not token:
         raise RuntimeError("DISCORD_TOKEN is missing from the environment file")
-    guilds = api_request(
-        "https://discord.com/api/v10/users/@me/guilds",
-        headers={"Authorization": f"Bot {token}"},
-    )
+    try:
+        guilds = api_request(
+            "https://discord.com/api/v10/users/@me/guilds",
+            headers={"Authorization": f"Bot {token}"},
+        )
+    except urllib.error.HTTPError as error:
+        if error.code != 403:
+            raise
+        updates["DISCORD_BOT_TOKEN"] = token
+        print("Discord: server ID will be discovered from the gateway connection")
+        return
     if len(guilds) != 1:
         visible = ", ".join(f"{guild['name']} ({guild['id']})" for guild in guilds)
         raise RuntimeError(f"Expected one Discord server; found: {visible or 'none'}")
     updates["DISCORD_GUILD_ID"] = str(guilds[0]["id"])
-    updates["DISCORD_TOKEN"] = token
+    updates["DISCORD_BOT_TOKEN"] = token
     print(f"Discord: selected {guilds[0]['name']}")
 
 

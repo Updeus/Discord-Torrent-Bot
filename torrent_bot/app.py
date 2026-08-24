@@ -88,6 +88,10 @@ class MediaBot(commands.Bot):
 
     async def on_ready(self) -> None:
         LOGGER.info("Logged in as %s (%s)", self.user, self.user.id if self.user else "unknown")
+        LOGGER.info(
+            "Connected Discord servers: %s",
+            ", ".join(f"{guild.name} ({guild.id})" for guild in self.guilds) or "none",
+        )
 
     async def on_command_error(self, ctx: commands.Context, error: commands.CommandError) -> None:
         original = getattr(error, "original", error)
