@@ -1,0 +1,11 @@
+[Unit]
+Description=Fallback synchronization check for nested Collection changes
+
+[Timer]
+OnBootSec=2min
+OnUnitInactiveSec=15min
+AccuracySec=30s
+Unit=jellyfin-collection-organizer.service
+
+[Install]
+WantedBy=timers.target

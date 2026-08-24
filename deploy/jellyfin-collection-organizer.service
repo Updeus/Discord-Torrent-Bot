@@ -1,0 +1,7 @@
+[Unit]
+Description=Synchronize mixed downloads into Jellyfin movie and show views
+
+[Service]
+Type=oneshot
+WorkingDirectory=/home/jarod/Discord-Torrent-Bot
+ExecStart=/home/jarod/Discord-Torrent-Bot/botenv/bin/python -m torrent_bot.organizer /mnt/AWA/Collection /mnt/AWA/Collection/JellyfinView2 --apply --min-age-seconds 120

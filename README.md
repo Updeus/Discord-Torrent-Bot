@@ -1,89 +1,65 @@
-# Discord Torrent Bot
+# Discord Media Bot
 
-This is a Discord bot that allows users to search for torrents on Nyaa.si and add them to qBittorrent. This bot can also download torrents from any magnet link that you provide.
-The bot supports various commands for searching, adding torrents, viewing recent searches and additions, setting filters, scheduling downloads, and more.
-![image](https://github.com/Updeus/Discord-Torrent-Bot/assets/73512650/d1840f30-d29b-4161-be71-5cf00725728b)
+A persistent Discord → Prowlarr → qBittorrent → Jellyfin automation service.
 
-## Prerequisites
+The original `!add <magnet>` command is preserved. The rebuilt bot also tracks
+downloads, maintains a Jellyfin-friendly hard-link view, verifies completed
+items in Jellyfin, and exposes equivalent Discord slash commands.
 
-- Python 3.8 or higher
-- `discord.py` library
-- `requests` library
-- `beautifulsoup4` library
-- `apscheduler` library
-- A qBittorrent Web UI instance running
+## How media flows
 
-## Installation
+1. A Discord member adds a magnet or selects a Prowlarr search result.
+2. qBittorrent downloads into `/mnt/AWA/Collection` with a routing category.
+3. The bot waits for qBittorrent to report completion.
+4. Media is hard-linked into `JellyfinView2/Movies` or `JellyfinView2/Shows`.
+5. The correct Jellyfin library is refreshed and queried until the item appears.
+6. One Discord status card is updated through the entire lifecycle.
 
-1. Clone this repository:
-    ```bash
-    git clone https://github.com/Updeus/Discord-Torrent-Bot.git
-    cd discord-torrent-bot
-    ```
-
-2. Install the required Python packages:
-    ```bash
-    pip install discord.py requests beautifulsoup4 apscheduler
-    ```
-
-3. Create a `.env` file in the root directory and add your environment variables:
-    ```env
-    QBITTORRENT_USERNAME=your_qbittorrent_username
-    QBITTORRENT_PASSWORD=your_qbittorrent_password
-    QBITTORRENT_BASE_URL=http://your_qbittorrent_ip:port
-    DISCORD_BOT_TOKEN=your_discord_bot_token
-    ```
-
-4. Create a `start.bat` file in the root directory to run your bot easily:
-    ```batch
-    @echo off
-    set "QBITTORRENT_USERNAME=your_qbittorrent_username"
-    set "QBITTORRENT_PASSWORD=your_qbittorrent_password"
-    set "QBITTORRENT_BASE_URL=http://your_qbittorrent_ip:port"
-    set "DISCORD_BOT_TOKEN=your_discord_bot_token"
-    python bot.py
-    pause
-    ```
-
-Replace the placeholders with your actual qBittorrent credentials, base URL, and Discord bot token.
-
-## Running the Bot
-
-1. Make sure your qBittorrent Web UI is running and accessible.
-2. Double-click the `start.bat` file to run the bot.
+Source downloads are never renamed or moved, so they remain seedable. Isolated
+episodes such as `Show.Name.S02E04.mkv` are retained and placed under the
+inferred show and season.
 
 ## Commands
 
-- `!search <query>` - Search for torrents on Nyaa.si.
-- `!add <magnet>` - Add a torrent to qBittorrent by magnet link.
-- `!recent_searches` - Show recent searches.
-- `!recent_additions` - Show recent added torrents.
-- `!setprefix <prefix>` - Set a custom command prefix.
-- `!setfilter <min_size> <max_size>` - Set file size filter in MB.
-- `!schedule <magnet> <time>` - Schedule a torrent download (format: YYYY-MM-DD HH:MM:SS).
-- `!stats` - Show bot statistics.
-- `!help_command` - Show this help message.
-- `!test_qbittorrent` - Test connection to qBittorrent Web UI.
+- `!add <magnet>` / `/add` — add with automatic routing.
+- `!addmovie`, `!addshow`, `!addanime` — explicit legacy routing commands.
+- `!search <query>` / `/search` — aggregated Prowlarr search with Nyaa fallback.
+- `!downloads`, `!status`, `!pause`, `!resume`, `!retry`, `!route`, `!remove`.
+- `!schedule`, `!recent_searches`, `!recent_additions`, `!setfilter`, `!stats`.
+- `!test_qbittorrent` — check qBittorrent, Prowlarr, and Jellyfin health.
 
-## Code Explanation
+All primary commands have slash-command equivalents. Removing downloaded files
+requires typing `DELETE` in a confirmation modal and is written to the audit log.
 
-### Main Script
+## Development
 
-The main script initializes the bot, sets up the necessary intents, defines various commands, and handles interactions with Nyaa.si and qBittorrent.
+```powershell
+python -m venv .venv
+.\.venv\Scripts\python -m pip install -r requirements-dev.txt
+.\.venv\Scripts\python -m pytest -q
+.\.venv\Scripts\ruff check bot.py torrent_bot tests
+```
 
-### Functions
+Copy `.env.example` to `.env`, fill in the credentials, and run:
 
-- `login_to_qbittorrent()`: Logs in to qBittorrent Web UI using the credentials provided in the environment variables.
-- `search_nyaa(query, min_size=0, max_size=float('inf'))`: Searches for torrents on Nyaa.si based on the query and size filters, and parses the results.
-- `parse_size(size_str)`: Parses the size string and converts it to bytes.
-- `add_torrent(magnet)`: Adds a torrent to qBittorrent using the magnet link.
+```powershell
+.\.venv\Scripts\python bot.py
+```
 
-### TorrentMenu Class
+The SQLite database is created automatically. Schema migrations are applied on
+startup, and WAL mode allows the organizer and bot to inspect state safely.
 
-The `TorrentMenu` class handles the interactive menu in Discord for browsing search results. It uses buttons for navigation and adding torrents.
+## Homeserver deployment
 
-### Commands
+Deployment templates are in `deploy/`. Prowlarr binds only to
+`127.0.0.1:9696`; use an SSH tunnel when its web interface needs configuration:
 
-Various commands are defined using the `@bot.command()` decorator. These commands allow users to interact with the bot to search for torrents, add them to qBittorrent, view recent searches and additions, set filters, and schedule downloads.
+```powershell
+ssh -L 9696:127.0.0.1:9696 jarod@192.168.100.205
+```
 
----
+The system service runs the bot from `/home/jarod/Discord-Torrent-Bot`. The user
+path and timer units retain the filesystem fallback organizer. Secrets stay in
+the existing mode-`0600` `.env` file and are never committed.
+
+Only configure Prowlarr indexers and download content you are authorized to use.
