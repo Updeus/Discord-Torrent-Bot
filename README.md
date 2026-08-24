@@ -17,7 +17,7 @@ cards, scheduled additions, safe organization, and Jellyfin readiness checks.
 - SQLite persistence for requests, schedules, preferences, Discord message IDs,
   state transitions, searches, routing changes, and audit events.
 - Duplicate detection for BitTorrent v1 and v2 info hashes before submission.
-- Prowlarr-backed search with a Nyaa-only fallback during Prowlarr outages.
+- Prowlarr-backed multi-indexer search with a Nyaa-only fallback during outages.
 - qBittorrent sync monitoring and dedicated routing categories.
 - Hard-link organization that leaves the original seeding files unchanged.
 - Separate Jellyfin Movies and Shows views, library scans, and readiness checks.
@@ -172,6 +172,10 @@ Deployment templates are under [`deploy/`](deploy/):
 - `jellyfin-collection-organizer.path` watches for top-level source changes.
 - `jellyfin-collection-organizer.timer` runs the 15-minute fallback scan.
 - `configure_runtime.py` configures local integrations without displaying keys.
+
+The runtime configurator idempotently adds Nyaa (anime), EZTV (television), YTS
+(movies), and 1337x (general search). Only enable and use indexers whose terms
+and content you are authorized to access.
 
 Review and replace the example user names, paths, UID/GID, timezone, and ports
 before installing the templates on another server.
