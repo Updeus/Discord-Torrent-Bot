@@ -100,7 +100,7 @@ def configure_prowlarr(base_url: str, config_path: Path, updates: dict[str, str]
         if name.casefold() in configured_names:
             print(f"Prowlarr: {name} already configured")
             continue
-        schema = schemas_by_definition.get(definition)
+        schema = schemas_by_definition.get(definition.casefold())
         if schema is None:
             print(f"Prowlarr: {name} schema is unavailable; skipped")
             continue
