@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from typing import Any
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urljoin, urlsplit
 
 import aiohttp
 import feedparser
@@ -82,7 +82,9 @@ class QBittorrentClient:
             "torrents/add",
             data={
                 "urls": magnet,
-                "category": f"discord-{route.value}",
+                # Keep active downloads in qBittorrent's normal Uncategorized
+                # view. The route is still visible and queryable as a tag.
+                "tags": f"discord-{route.value}",
                 "savepath": save_path,
             },
         )
@@ -98,7 +100,7 @@ class QBittorrentClient:
         form.add_field(
             "torrents", payload, filename=filename, content_type="application/x-bittorrent"
         )
-        form.add_field("category", f"discord-{route.value}")
+        form.add_field("tags", f"discord-{route.value}")
         form.add_field("savepath", save_path)
         response = await self._request("POST", "torrents/add", data=form)
         body = await response.text()
@@ -138,13 +140,24 @@ class QBittorrentClient:
         response = await self._request("POST", endpoint, data=data)
         response.release()
 
-    async def set_category(self, info_hash: str, route: Route) -> None:
-        response = await self._request(
+    async def set_route(self, info_hash: str, route: Route) -> None:
+        clear_category = await self._request(
             "POST",
             "torrents/setCategory",
-            data={"hashes": info_hash, "category": f"discord-{route.value}"},
+            data={"hashes": info_hash, "category": ""},
         )
-        response.release()
+        clear_category.release()
+        route_tags = ",".join(f"discord-{value.value}" for value in Route)
+        remove_tags = await self._request(
+            "POST", "torrents/removeTags", data={"hashes": info_hash, "tags": route_tags}
+        )
+        remove_tags.release()
+        add_tag = await self._request(
+            "POST",
+            "torrents/addTags",
+            data={"hashes": info_hash, "tags": f"discord-{route.value}"},
+        )
+        add_tag.release()
 
 
 class ProwlarrClient:
@@ -203,20 +216,32 @@ class ProwlarrClient:
             )
         return results
 
-    async def download(self, result: SearchResult) -> tuple[str, bytes]:
+    async def download(self, result: SearchResult) -> tuple[str, bytes] | str:
         if not result.download_url:
             raise ServiceError("Search result has no downloadable torrent")
         url = result.download_url
         if url.startswith("/"):
             url = f"{self.base_url}{url}"
-        async with self.session.get(url, headers=self.headers) as response:
-            if response.status != 200:
-                raise ServiceError(f"Prowlarr download failed ({response.status})")
-            payload = await response.read()
-            content_type = response.headers.get("Content-Type", "")
-            if "bittorrent" not in content_type and not payload.startswith(b"d"):
-                raise ServiceError("Prowlarr returned an unexpected download payload")
-        return f"{result.result_id}.torrent", payload
+        prowlarr_origin = urlsplit(self.base_url)[:2]
+        for _ in range(6):
+            headers = self.headers if urlsplit(url)[:2] == prowlarr_origin else {}
+            async with self.session.get(url, headers=headers, allow_redirects=False) as response:
+                if 300 <= response.status < 400:
+                    location = response.headers.get("Location", "")
+                    if location.startswith("magnet:?"):
+                        return location
+                    if not location:
+                        raise ServiceError("Prowlarr download redirect had no destination")
+                    url = urljoin(url, location)
+                    continue
+                if response.status != 200:
+                    raise ServiceError(f"Prowlarr download failed ({response.status})")
+                payload = await response.read()
+                content_type = response.headers.get("Content-Type", "")
+                if "bittorrent" not in content_type and not payload.startswith(b"d"):
+                    raise ServiceError("Prowlarr returned an unexpected download payload")
+                return f"{result.result_id}.torrent", payload
+        raise ServiceError("Prowlarr download followed too many redirects")
 
 
 class NyaaProvider:

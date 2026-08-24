@@ -48,6 +48,11 @@ class FakeProwlarr:
         ]
 
 
+class RedirectingProwlarr:
+    async def download(self, result: SearchResult) -> str:
+        return "magnet:?xt=urn:btih:" + "ab" * 20
+
+
 @pytest.mark.asyncio
 async def test_duplicate_add_is_idempotent(tmp_path: Path) -> None:
     database = Database(tmp_path / "bot.db")
@@ -89,6 +94,39 @@ async def test_search_ranks_title_matches_before_incidental_matches(tmp_path: Pa
     results = await service.search("Pluribus", user_id=1)
 
     assert [result.result_id for result in results] == ["show", "incidental"]
+    await database.close()
+
+
+@pytest.mark.asyncio
+async def test_search_result_magnet_redirect_is_added(tmp_path: Path) -> None:
+    database = Database(tmp_path / "bot.db")
+    await database.connect()
+    qbit = FakeQbit()
+    settings = SimpleNamespace(collection_source=tmp_path)
+    service = MediaService(
+        settings,
+        database,
+        qbit,
+        RedirectingProwlarr(),  # type: ignore[arg-type]
+        None,
+        None,
+    )
+    result = SearchResult(
+        result_id="redirect",
+        title="Example Show S01",
+        size=1000,
+        seeders=10,
+        leechers=0,
+        indexer="General",
+        category="TV",
+        download_url="/download",
+    )
+
+    request, created = await service.add_search_result(result, Route.SHOW, 1, 2, 3)
+
+    assert created is True
+    assert request.info_hash == "ab" * 20
+    assert qbit.added == [("magnet:?xt=urn:btih:" + "ab" * 20, Route.SHOW, str(tmp_path))]
     await database.close()
 
 

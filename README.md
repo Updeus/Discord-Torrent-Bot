@@ -18,7 +18,7 @@ cards, scheduled additions, safe organization, and Jellyfin readiness checks.
   state transitions, searches, routing changes, and audit events.
 - Duplicate detection for BitTorrent v1 and v2 info hashes before submission.
 - Prowlarr-backed multi-indexer search with a Nyaa-only fallback during outages.
-- qBittorrent sync monitoring and dedicated routing categories.
+- qBittorrent sync monitoring with visible route tags and optional routing categories.
 - Hard-link organization that leaves the original seeding files unchanged.
 - Separate Jellyfin Movies and Shows views, library scans, and readiness checks.
 - Native `discord.ui` buttons, pagination, status embeds, and deletion modals.
@@ -40,7 +40,12 @@ original Discord status message survive service restarts.
 
 ## Organization and routing
 
-All qBittorrent categories retain the same source download directory:
+Bot-created downloads remain in qBittorrent's normal **Uncategorized** view so
+they are visible with the default Web UI filter. Their route is recorded as one
+of the `discord-auto`, `discord-movie`, `discord-show`, or `discord-anime` tags.
+
+The matching qBittorrent categories are also available for manual routing and
+retain the same source download directory:
 
 | Category | Purpose |
 | --- | --- |
