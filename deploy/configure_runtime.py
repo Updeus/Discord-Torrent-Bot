@@ -6,12 +6,14 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import secrets
 import sqlite3
 import time
 import urllib.error
 import urllib.parse
 import urllib.request
 import xml.etree.ElementTree as ET
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -126,7 +128,17 @@ def jellyfin_token(db_path: Path, base_url: str) -> str:
             "SELECT AccessToken FROM ApiKeys ORDER BY DateLastActivity DESC LIMIT 1"
         ).fetchone()
     if not row:
-        raise RuntimeError("Jellyfin has no API key that can create a scoped bot key")
+        token = secrets.token_hex(16)
+        now = datetime.now(UTC).isoformat(timespec="milliseconds").replace("+00:00", "Z")
+        with sqlite3.connect(db_path) as database:
+            database.execute(
+                "INSERT INTO ApiKeys "
+                "(DateCreated, DateLastActivity, Name, AccessToken) "
+                "VALUES (?, ?, ?, ?)",
+                (now, now, "Discord Media Bot", token),
+            )
+        print("Jellyfin: bootstrapped a scoped API key")
+        return token
 
     bootstrap_token = str(row[0])
     api_request(
