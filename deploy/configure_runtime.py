@@ -90,9 +90,10 @@ def configure_prowlarr(base_url: str, config_path: Path, updates: dict[str, str]
         raise RuntimeError("Prowlarr does not expose an application profile")
     desired_indexers = (
         ("nyaa", "Nyaa", 25),
-        ("eztv", "EZTV", 20),
         ("yts", "YTS", 20),
-        ("1337x", "1337x", 30),
+        ("TorrentsCSV", "TorrentsCSV", 20),
+        ("torrentdownloads", "Torrent Downloads", 30),
+        ("thepiratebay", "The Pirate Bay", 30),
     )
     schemas_by_definition = {item.get("definitionName", "").casefold(): item for item in schemas}
     for definition, name, priority in desired_indexers:

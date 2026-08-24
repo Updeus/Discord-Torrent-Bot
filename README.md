@@ -173,9 +173,10 @@ Deployment templates are under [`deploy/`](deploy/):
 - `jellyfin-collection-organizer.timer` runs the 15-minute fallback scan.
 - `configure_runtime.py` configures local integrations without displaying keys.
 
-The runtime configurator idempotently adds Nyaa (anime), EZTV (television), YTS
-(movies), and 1337x (general search). Only enable and use indexers whose terms
-and content you are authorized to access.
+The runtime configurator idempotently adds Nyaa (anime), YTS (movies), and
+multiple general-purpose public indexers. Providers that fail live validation
+are skipped rather than breaking the working search set. Only enable and use
+indexers whose terms and content you are authorized to access.
 
 Review and replace the example user names, paths, UID/GID, timezone, and ports
 before installing the templates on another server.

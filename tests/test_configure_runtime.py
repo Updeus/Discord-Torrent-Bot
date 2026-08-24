@@ -26,9 +26,10 @@ def test_prowlarr_configures_general_indexers_idempotently(tmp_path: Path, monke
                 {"definitionName": name, "name": display, "fields": []}
                 for name, display in (
                     ("nyaa", "Nyaa"),
-                    ("eztv", "EZTV"),
                     ("yts", "YTS"),
-                    ("1337x", "1337x"),
+                    ("TorrentsCSV", "TorrentsCSV"),
+                    ("torrentdownloads", "Torrent Downloads"),
+                    ("thepiratebay", "The Pirate Bay"),
                 )
             ]
         if url.endswith("/appprofile"):
@@ -43,6 +44,6 @@ def test_prowlarr_configures_general_indexers_idempotently(tmp_path: Path, monke
     updates: dict[str, str] = {}
     configure_runtime.configure_prowlarr("http://prowlarr", config, updates)
 
-    assert created == ["EZTV", "YTS", "1337x"]
+    assert created == ["YTS", "TorrentsCSV", "Torrent Downloads", "The Pirate Bay"]
     assert updates["PROWLARR_BASE_URL"] == "http://prowlarr"
     assert updates["PROWLARR_API_KEY"] == "hidden"
