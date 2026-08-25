@@ -5,10 +5,12 @@ from unittest.mock import AsyncMock
 import pytest
 
 from torrent_bot.clients import (
+    JellyfinClient,
     ProwlarrClient,
     QBittorrentClient,
     jellyfin_search_terms,
     normalize_result_links,
+    public_poster_url,
 )
 from torrent_bot.models import Route, SearchResult, TorrentStatus
 
@@ -38,6 +40,27 @@ class RedirectSession:
     def get(self, *args: object, **kwargs: object) -> Response:
         assert kwargs["allow_redirects"] is False
         return Response(302, {"Location": self.location})
+
+
+class JsonResponse(Response):
+    async def json(self) -> list[dict[str, object]]:
+        return [
+            {
+                "Name": "Hamnet",
+                "ProductionYear": 2025,
+                "ImageUrl": "https://image.tmdb.org/t/p/original/poster.jpg",
+            }
+        ]
+
+
+class PosterSession:
+    def post(self, url: str, **kwargs: object) -> JsonResponse:
+        assert url.endswith("/Items/RemoteSearch/Movie")
+        assert kwargs["json"] == {
+            "SearchInfo": {"Name": "Hamnet", "Year": 2025},
+            "IncludeDisabledProviders": False,
+        }
+        return JsonResponse()
 
 
 @pytest.mark.asyncio
@@ -97,6 +120,22 @@ def test_jellyfin_search_retries_without_alternate_title() -> None:
         "Witch Hat Atelier (Tongari Boushi no Atelier",
         "Witch Hat Atelier",
     ]
+
+
+@pytest.mark.asyncio
+async def test_jellyfin_remote_poster_uses_metadata_provider() -> None:
+    client = JellyfinClient(PosterSession(), "http://jellyfin", "key")  # type: ignore[arg-type]
+
+    assert await client.remote_poster("Hamnet (2025)", series=False) == (
+        "https://image.tmdb.org/t/p/original/poster.jpg"
+    )
+
+
+def test_poster_url_rejects_private_or_insecure_images() -> None:
+    assert public_poster_url("http://image.example/poster.jpg") is None
+    assert public_poster_url("https://127.0.0.1/poster.jpg") is None
+    assert public_poster_url("https://192.168.100.205/poster.jpg") is None
+    assert public_poster_url("https://image.tmdb.org/poster.jpg") is not None
 
 
 def test_torrent_must_be_fully_downloaded_before_organization() -> None:

@@ -50,6 +50,7 @@ class MediaRequest:
     eta: int = 0
     error: str | None = None
     jellyfin_item_id: str | None = None
+    poster_url: str | None = None
     scheduled_for: str | None = None
     source_uri: str | None = None
     created_at: str = ""

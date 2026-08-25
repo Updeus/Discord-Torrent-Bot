@@ -12,6 +12,8 @@ from torrent_bot.service import (
     JELLYFIN_TIMEOUT_ERROR,
     MediaService,
     awaiting_jellyfin,
+    monitor_interval,
+    poster_lookup,
     torrent_file_hash,
 )
 
@@ -154,3 +156,17 @@ def test_timed_out_jellyfin_request_remains_reconcilable() -> None:
     )
 
     assert awaiting_jellyfin(request) is True
+
+
+def test_active_downloads_poll_twice_as_fast() -> None:
+    assert monitor_interval(10, downloading=False) == 10
+    assert monitor_interval(10, downloading=True) == 5
+
+
+def test_anime_poster_lookup_cleans_release_name() -> None:
+    request = SimpleNamespace(
+        title="[Judas] Witch Hat Atelier (Tongari Boushi no Atelier) (Season 01) [1080p]",
+        route=Route.ANIME,
+    )
+
+    assert poster_lookup(request) == ("Witch Hat Atelier (Tongari Boushi no Atelier)", True)

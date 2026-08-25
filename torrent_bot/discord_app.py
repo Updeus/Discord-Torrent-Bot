@@ -39,40 +39,59 @@ def status_embed(request: MediaRequest) -> discord.Embed:
         RequestState.PAUSED: discord.Color.gold(),
         RequestState.REMOVED: discord.Color.dark_grey(),
     }
+    state_labels = {
+        RequestState.SCHEDULED: "🗓️ Scheduled",
+        RequestState.QUEUED: "⏳ Queued",
+        RequestState.DOWNLOADING: "⬇️ Downloading",
+        RequestState.PAUSED: "⏸️ Paused",
+        RequestState.ORGANIZING: "🗂️ Organizing",
+        RequestState.SCANNING: "🔎 Adding to Jellyfin",
+        RequestState.READY: "✅ Ready",
+        RequestState.NEEDS_ATTENTION: "⚠️ Needs Attention",
+        RequestState.ERROR: "❌ Error",
+        RequestState.REMOVED: "🗑️ Removed",
+    }
+    route_labels = {
+        Route.AUTO: "✨ Automatic",
+        Route.MOVIE: "🎬 Movie",
+        Route.SHOW: "📺 TV Show",
+        Route.ANIME: "🌸 Anime",
+    }
     embed = discord.Embed(
         title=request.title or "Resolving metadata",
-        description=f"Request **#{request.id}**",
+        description=f"{state_labels[request.state]}  •  Request **#{request.id}**",
         color=colors.get(request.state, discord.Color.blurple()),
     )
-    embed.add_field(name="State", value=request.state.value.replace("_", " ").title())
-    embed.add_field(name="Route", value=request.route.value.title())
-    embed.add_field(name="Requester", value=f"<@{request.requester_id}>")
+    if request.poster_url:
+        embed.set_thumbnail(url=request.poster_url)
+    embed.add_field(name="Media type", value=route_labels[request.route])
+    embed.add_field(name="Requested by", value=f"<@{request.requester_id}>")
     if request.state in {
         RequestState.QUEUED,
         RequestState.DOWNLOADING,
         RequestState.PAUSED,
     }:
         progress = max(0.0, min(1.0, request.progress))
-        blocks = round(progress * 10)
+        blocks = round(progress * 14)
         embed.add_field(
-            name="Progress",
-            value=f"`{'█' * blocks}{'░' * (10 - blocks)}` {progress:.1%}",
+            name=f"Progress • {progress:.1%}",
+            value=f"`{'▰' * blocks}{'▱' * (14 - blocks)}`",
             inline=False,
         )
-        embed.add_field(name="Speed", value=f"{human_bytes(request.download_speed)}/s")
+        embed.add_field(name="Download speed", value=f"⬇ {human_bytes(request.download_speed)}/s")
         eta = (
             "Unknown"
             if request.eta <= 0 or request.eta >= 8_640_000
             else f"{request.eta // 60} min"
         )
-        embed.add_field(name="ETA", value=eta)
+        embed.add_field(name="Time remaining", value=f"⏱ {eta}")
     if request.scheduled_for:
         embed.add_field(name="Scheduled", value=request.scheduled_for, inline=False)
     if request.error:
         embed.add_field(name="Details", value=request.error[:1000], inline=False)
     if request.jellyfin_item_id:
-        embed.add_field(name="Jellyfin", value="Visible in library", inline=False)
-    embed.set_footer(text=f"Info hash {request.info_hash[:12]}…")
+        embed.add_field(name="Jellyfin", value="✅ Available in your library", inline=False)
+    embed.set_footer(text=f"Request #{request.id}  •  Info hash {request.info_hash[:12]}…")
     return embed
 
 

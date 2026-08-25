@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import ipaddress
 import logging
 import re
 from typing import Any
@@ -49,6 +50,21 @@ def jellyfin_search_terms(title: str) -> list[str]:
     for value in tuple(terms):
         add(re.sub(r"\s*\([^)]*\)?\s*$", "", value))
     return terms
+
+
+def public_poster_url(value: object) -> str | None:
+    if not isinstance(value, str):
+        return None
+    parsed = urlsplit(value)
+    if parsed.scheme.lower() != "https" or not parsed.hostname:
+        return None
+    if parsed.hostname.casefold() == "localhost":
+        return None
+    try:
+        address = ipaddress.ip_address(parsed.hostname)
+    except ValueError:
+        return value
+    return None if not address.is_global else value
 
 
 class QBittorrentClient:
@@ -355,6 +371,31 @@ class JellyfinClient:
         async with self.session.post(url, headers=self.headers, params=params) as response:
             if response.status not in {200, 204}:
                 raise ServiceError(f"Jellyfin refresh failed ({response.status})")
+
+    async def remote_poster(self, title: str, *, series: bool) -> str | None:
+        """Find a genuine poster through Jellyfin's configured metadata providers."""
+        year_match = re.search(r"(?<!\d)((?:19|20)\d{2})(?!\d)", title)
+        search_title = jellyfin_search_terms(title)[-1]
+        search_info: dict[str, Any] = {"Name": search_title}
+        if year_match:
+            search_info["Year"] = int(year_match.group(1))
+        endpoint = "Series" if series else "Movie"
+        payload = {"SearchInfo": search_info, "IncludeDisabledProviders": False}
+        timeout = aiohttp.ClientTimeout(total=45, connect=10)
+        async with self.session.post(
+            f"{self.base_url}/Items/RemoteSearch/{endpoint}",
+            headers=self.headers,
+            json=payload,
+            timeout=timeout,
+        ) as response:
+            if response.status != 200:
+                raise ServiceError(f"Jellyfin poster lookup failed ({response.status})")
+            results = await response.json()
+        for result in results:
+            image_url = public_poster_url(result.get("ImageUrl"))
+            if image_url:
+                return image_url
+        return None
 
     async def find_item(self, title: str, parent_id: str = "") -> dict[str, Any] | None:
         for search_term in jellyfin_search_terms(title):

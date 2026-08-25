@@ -21,7 +21,11 @@ cards, scheduled additions, safe organization, and Jellyfin readiness checks.
 - qBittorrent sync monitoring with visible route tags and optional routing categories.
 - Hard-link organization that leaves the original seeding files unchanged.
 - Separate Jellyfin Movies and Shows views, library scans, and readiness checks.
-- Native `discord.ui` buttons, pagination, status embeds, and deletion modals.
+- Native `discord.ui` buttons, pagination, polished live status embeds, and deletion modals.
+- Real poster discovery through Jellyfin's metadata providers during downloads;
+  cards omit artwork cleanly when no poster is available.
+- Adaptive monitoring refreshes active downloads every 5 seconds and returns to
+  the normal 10-second interval when no download is active.
 - systemd service, path watcher, 15-minute fallback timer, and journald logging.
 - Secret redaction and a mode-`0600` environment file.
 

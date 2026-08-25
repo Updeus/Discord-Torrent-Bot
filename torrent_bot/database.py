@@ -34,6 +34,7 @@ CREATE TABLE IF NOT EXISTS media_requests(
     eta INTEGER NOT NULL DEFAULT 0,
     error TEXT,
     jellyfin_item_id TEXT,
+    poster_url TEXT,
     scheduled_for TEXT,
     source_uri TEXT,
     created_at TEXT NOT NULL,
@@ -86,6 +87,10 @@ class Database:
         self.connection = await aiosqlite.connect(self.path)
         self.connection.row_factory = aiosqlite.Row
         await self.connection.executescript(SCHEMA)
+        cursor = await self.connection.execute("PRAGMA table_info(media_requests)")
+        columns = {row[1] for row in await cursor.fetchall()}
+        if "poster_url" not in columns:
+            await self.connection.execute("ALTER TABLE media_requests ADD COLUMN poster_url TEXT")
         await self.connection.commit()
 
     async def close(self) -> None:
@@ -179,6 +184,7 @@ class Database:
             "eta",
             "error",
             "jellyfin_item_id",
+            "poster_url",
             "scheduled_for",
             "source_uri",
         }

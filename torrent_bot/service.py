@@ -13,7 +13,15 @@ from .clients import JellyfinClient, NyaaProvider, ProwlarrClient, QBittorrentCl
 from .config import Settings
 from .database import Database
 from .models import TERMINAL_STATES, MediaRequest, RequestState, Route, SearchResult
-from .organizer import OrganizationResult, organize_item
+from .organizer import (
+    EPISODE_PATTERN,
+    NUMBERED_EPISODE_PATTERN,
+    SEASON_PATTERN,
+    OrganizationResult,
+    movie_name,
+    organize_item,
+    series_name,
+)
 from .utils import magnet_info_hash
 
 LOGGER = logging.getLogger(__name__)
@@ -25,6 +33,24 @@ def awaiting_jellyfin(request: MediaRequest) -> bool:
     return request.state == RequestState.SCANNING or (
         request.state == RequestState.NEEDS_ATTENTION and request.error == JELLYFIN_TIMEOUT_ERROR
     )
+
+
+def monitor_interval(poll_seconds: int, downloading: bool) -> float:
+    return max(1.0, poll_seconds / 2) if downloading else float(poll_seconds)
+
+
+def poster_lookup(request: MediaRequest) -> tuple[str, bool]:
+    source = Path(request.title)
+    series = request.route in {Route.SHOW, Route.ANIME} or (
+        request.route == Route.AUTO
+        and bool(
+            EPISODE_PATTERN.search(request.title)
+            or SEASON_PATTERN.search(request.title)
+            or NUMBERED_EPISODE_PATTERN.search(source.stem)
+        )
+    )
+    cleaned = series_name(source) if series else movie_name(source.stem)
+    return cleaned, series
 
 
 def torrent_file_hash(payload: bytes) -> str:
@@ -52,6 +78,7 @@ class MediaService:
         self.jellyfin = jellyfin
         self.notifier: Notifier | None = None
         self._monitor_task: asyncio.Task[None] | None = None
+        self._poster_tasks: dict[int, asyncio.Task[None]] = {}
         self._stop = asyncio.Event()
 
     async def start(self) -> None:
@@ -66,6 +93,10 @@ class MediaService:
         if self._monitor_task:
             self._monitor_task.cancel()
             await asyncio.gather(self._monitor_task, return_exceptions=True)
+        for task in self._poster_tasks.values():
+            task.cancel()
+        await asyncio.gather(*self._poster_tasks.values(), return_exceptions=True)
+        self._poster_tasks.clear()
 
     async def _notify(self, request: MediaRequest) -> None:
         if self.notifier:
@@ -242,20 +273,25 @@ class MediaService:
 
     async def _monitor(self) -> None:
         while not self._stop.is_set():
+            downloading = False
             try:
-                await self._monitor_once()
+                downloading = await self._monitor_once()
             except asyncio.CancelledError:
                 raise
             except Exception:
                 LOGGER.exception("Media monitor iteration failed")
             try:
-                await asyncio.wait_for(self._stop.wait(), timeout=self.settings.poll_seconds)
+                await asyncio.wait_for(
+                    self._stop.wait(),
+                    timeout=monitor_interval(self.settings.poll_seconds, downloading),
+                )
             except TimeoutError:
                 pass
 
-    async def _monitor_once(self) -> None:
+    async def _monitor_once(self) -> bool:
         requests = await self.database.list_requests(limit=100)
         now = datetime.now(UTC)
+        downloading = False
         for request in requests:
             if request.state in TERMINAL_STATES and not awaiting_jellyfin(request):
                 continue
@@ -303,11 +339,35 @@ class MediaService:
                 if status.complete:
                     values["state"] = RequestState.ORGANIZING
                 request = await self._update(request.id, **values)
+                if request.state == RequestState.DOWNLOADING:
+                    downloading = True
+                    self._schedule_poster(request)
                 if status.complete:
                     await self._organize(request)
             except Exception as error:
                 LOGGER.exception("Request %s monitor failed", request.id)
                 await self._update(request.id, state=RequestState.ERROR, error=str(error)[:500])
+        return downloading
+
+    def _schedule_poster(self, request: MediaRequest, *, force: bool = False) -> None:
+        if not self.settings.jellyfin_enabled or request.id in self._poster_tasks:
+            return
+        if request.poster_url is not None and not force:
+            return
+        task = asyncio.create_task(self._resolve_poster(request), name=f"poster-{request.id}")
+        self._poster_tasks[request.id] = task
+        task.add_done_callback(lambda _: self._poster_tasks.pop(request.id, None))
+
+    async def _resolve_poster(self, request: MediaRequest) -> None:
+        try:
+            title, series = poster_lookup(request)
+            poster_url = await self.jellyfin.remote_poster(title, series=series)
+        except Exception as error:
+            LOGGER.warning(
+                "Poster lookup failed for request %s (%s)", request.id, type(error).__name__
+            )
+            poster_url = None
+        await self._update(request.id, poster_url=poster_url or "")
 
     async def _organize(self, request: MediaRequest) -> None:
         path = Path(request.content_path or "")
@@ -376,6 +436,8 @@ class MediaService:
                 eta=0,
                 error=None,
             )
+            if not request.poster_url:
+                self._schedule_poster(request, force=True)
             return
         updated = datetime.fromisoformat(request.updated_at)
         if (datetime.now(UTC) - updated).total_seconds() >= self.settings.jellyfin_timeout_seconds:
