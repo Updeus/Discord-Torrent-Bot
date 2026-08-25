@@ -18,6 +18,13 @@ from .utils import magnet_info_hash
 
 LOGGER = logging.getLogger(__name__)
 Notifier = Callable[[MediaRequest], Awaitable[None]]
+JELLYFIN_TIMEOUT_ERROR = "Organized, but Jellyfin did not report the item before the timeout"
+
+
+def awaiting_jellyfin(request: MediaRequest) -> bool:
+    return request.state == RequestState.SCANNING or (
+        request.state == RequestState.NEEDS_ATTENTION and request.error == JELLYFIN_TIMEOUT_ERROR
+    )
 
 
 def torrent_file_hash(payload: bytes) -> str:
@@ -250,7 +257,7 @@ class MediaService:
         requests = await self.database.list_requests(limit=100)
         now = datetime.now(UTC)
         for request in requests:
-            if request.state in TERMINAL_STATES:
+            if request.state in TERMINAL_STATES and not awaiting_jellyfin(request):
                 continue
             try:
                 if request.state == RequestState.SCHEDULED:
@@ -274,7 +281,7 @@ class MediaService:
                                 request.id, state=RequestState.QUEUED, scheduled_for=None
                             )
                     continue
-                if request.state == RequestState.SCANNING:
+                if awaiting_jellyfin(request):
                     await self._verify_jellyfin(request)
                     continue
                 status = await self.qbit.torrent(request.info_hash)
@@ -371,8 +378,9 @@ class MediaService:
             return
         updated = datetime.fromisoformat(request.updated_at)
         if (datetime.now(UTC) - updated).total_seconds() >= self.settings.jellyfin_timeout_seconds:
-            await self._update(
-                request.id,
-                state=RequestState.NEEDS_ATTENTION,
-                error="Organized, but Jellyfin did not report the item before the timeout",
-            )
+            if request.state != RequestState.NEEDS_ATTENTION:
+                await self._update(
+                    request.id,
+                    state=RequestState.NEEDS_ATTENTION,
+                    error=JELLYFIN_TIMEOUT_ERROR,
+                )

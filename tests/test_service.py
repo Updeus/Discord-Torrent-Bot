@@ -8,7 +8,12 @@ import pytest
 
 from torrent_bot.database import Database
 from torrent_bot.models import RequestState, Route, SearchResult
-from torrent_bot.service import MediaService, torrent_file_hash
+from torrent_bot.service import (
+    JELLYFIN_TIMEOUT_ERROR,
+    MediaService,
+    awaiting_jellyfin,
+    torrent_file_hash,
+)
 
 
 class FakeQbit:
@@ -140,3 +145,12 @@ def test_torrent_file_hash_is_info_dictionary_hash() -> None:
 def test_invalid_torrent_file() -> None:
     with pytest.raises(ValueError):
         torrent_file_hash(bencodepy.encode({b"not-info": b"value"}))
+
+
+def test_timed_out_jellyfin_request_remains_reconcilable() -> None:
+    request = SimpleNamespace(
+        state=RequestState.NEEDS_ATTENTION,
+        error=JELLYFIN_TIMEOUT_ERROR,
+    )
+
+    assert awaiting_jellyfin(request) is True

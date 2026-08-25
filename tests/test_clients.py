@@ -92,6 +92,13 @@ def test_jellyfin_search_retries_without_year() -> None:
     ]
 
 
+def test_jellyfin_search_retries_without_alternate_title() -> None:
+    assert jellyfin_search_terms("Witch Hat Atelier (Tongari Boushi no Atelier") == [
+        "Witch Hat Atelier (Tongari Boushi no Atelier",
+        "Witch Hat Atelier",
+    ]
+
+
 def test_torrent_must_be_fully_downloaded_before_organization() -> None:
     status = TorrentStatus(
         info_hash="ab" * 20,

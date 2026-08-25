@@ -34,10 +34,20 @@ def normalize_result_links(*values: object) -> tuple[str | None, str | None]:
 
 
 def jellyfin_search_terms(title: str) -> list[str]:
-    terms = [title.strip()]
-    without_year = re.sub(r"\s*\((?:19|20)\d{2}\)\s*$", "", title).strip()
-    if without_year and without_year not in terms:
-        terms.append(without_year)
+    terms: list[str] = []
+
+    def add(value: str) -> None:
+        value = value.strip(" ._-")
+        if value and value not in terms:
+            terms.append(value)
+
+    add(title)
+    add(re.sub(r"\s*\((?:19|20)\d{2}\)\s*$", "", title))
+    # Jellyfin often stores only the primary display title while release names
+    # include an alternate title in parentheses. This also handles a truncated
+    # alias that is missing its final parenthesis.
+    for value in tuple(terms):
+        add(re.sub(r"\s*\([^)]*\)?\s*$", "", value))
     return terms
 
 

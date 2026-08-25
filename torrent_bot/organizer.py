@@ -116,10 +116,14 @@ def series_name(source: Path, files: list[Path] | None = None) -> str:
         match = EPISODE_PATTERN.search(filename)
         if match:
             value = filename[: match.start()]
-    value = re.sub(r"(?i)\s*[ ._-]*(?:complete[ ._-]*)?(?:season|series|S)\s*0?\d+.*$", "", value)
+    value = re.sub(
+        r"(?i)\s*[\[(]?\s*(?:complete[ ._-]*)?(?:season|series|S)\s*0?\d+.*$",
+        "",
+        value,
+    )
     value = ORDINAL_SEASON_PATTERN.sub("", value)
     value = re.sub(r"\s*\((?:19|20)\d{2}\)\s*$", "", value)
-    return re.sub(r"\s+", " ", value).strip(" ._-()[]") or safe_name(source.name)
+    return re.sub(r"\s+", " ", value).strip(" ._-") or safe_name(source.name)
 
 
 def movie_name(value: str) -> str:
