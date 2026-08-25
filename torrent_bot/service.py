@@ -419,6 +419,18 @@ class MediaService:
         await self.jellyfin.refresh_library(library_id)
 
     async def _verify_jellyfin(self, request: MediaRequest) -> None:
+        if request.jellyfin_item_id:
+            request = await self._update(
+                request.id,
+                state=RequestState.READY,
+                progress=1.0,
+                download_speed=0,
+                eta=0,
+                error=None,
+            )
+            if not request.poster_url:
+                self._schedule_poster(request, force=True)
+            return
         library_id = (
             self.settings.jellyfin_shows_library_id
             if request.route in {Route.SHOW, Route.ANIME}
