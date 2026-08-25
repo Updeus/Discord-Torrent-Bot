@@ -369,6 +369,7 @@ class MediaService:
             await self._update(
                 request.id,
                 state=RequestState.READY,
+                title=str(item.get("Name") or request.title),
                 jellyfin_item_id=str(item.get("Id", "")),
                 progress=1.0,
                 download_speed=0,
