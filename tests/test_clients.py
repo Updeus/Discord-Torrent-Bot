@@ -4,8 +4,13 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from torrent_bot.clients import ProwlarrClient, QBittorrentClient
-from torrent_bot.models import Route, SearchResult
+from torrent_bot.clients import (
+    ProwlarrClient,
+    QBittorrentClient,
+    jellyfin_search_terms,
+    normalize_result_links,
+)
+from torrent_bot.models import Route, SearchResult, TorrentStatus
 
 
 class Response:
@@ -67,3 +72,38 @@ async def test_prowlarr_download_accepts_magnet_redirect() -> None:
     )
 
     assert await client.download(result) == magnet
+
+
+def test_prowlarr_links_are_normalized_when_fields_are_swapped() -> None:
+    magnet = "magnet:?xt=urn:btih:" + "ef" * 20
+
+    download_url, normalized_magnet = normalize_result_links(
+        magnet, "https://indexer.example/download/1", "https://indexer.example/item/1"
+    )
+
+    assert normalized_magnet == magnet
+    assert download_url == "https://indexer.example/download/1"
+
+
+def test_jellyfin_search_retries_without_year() -> None:
+    assert jellyfin_search_terms("Everything Everywhere All At Once (2022)") == [
+        "Everything Everywhere All At Once (2022)",
+        "Everything Everywhere All At Once",
+    ]
+
+
+def test_torrent_must_be_fully_downloaded_before_organization() -> None:
+    status = TorrentStatus(
+        info_hash="ab" * 20,
+        name="Almost complete",
+        state="downloading",
+        progress=0.9999,
+        download_speed=1,
+        eta=1,
+        content_path="/media/file",
+    )
+
+    assert status.complete is False
+    status.progress = 1.0
+    status.state = "stalledUP"
+    assert status.complete is True

@@ -89,7 +89,7 @@ class TorrentStatus:
 
     @property
     def complete(self) -> bool:
-        return self.progress >= 0.999 and self.state not in {
+        return self.progress >= 1.0 and self.state not in {
             "checkingDL",
             "checkingUP",
             "checkingResumeData",
